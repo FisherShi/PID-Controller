@@ -2,6 +2,7 @@
 #include <iostream>
 #include "json.hpp"
 #include "PID.h"
+#include <list>
 #include <math.h>
 
 // for convenience
@@ -38,13 +39,16 @@ int main()
     pid.Ki = 0;
     pid.Kd = 0;
     pid.Init(pid.Kp, pid.Ki, pid.Kd);
+    std::vector<double> cte_history; // to store the cte values over time
 
-    h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+    h.onMessage([&pid,&cte_history](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
+
         if (length && length > 2 && data[0] == '4' && data[1] == '2')
         {
+
             auto s = hasData(std::string(data));
             if (s != "") {
                 auto j = json::parse(s);
@@ -52,6 +56,14 @@ int main()
                 if (event == "telemetry") {
                     // j[1] is the data JSON object
                     double cte = std::stod(j[1]["cte"].get<std::string>());
+                    cte_history.push_back(cte);//store the history of cte
+
+                    //calculate total cte
+                    double cte_total = 0;
+                    std::for_each(cte_history.begin(), cte_history.end(), [&] (double n) {
+                        cte_total += n;
+                    });
+
                     double speed = std::stod(j[1]["speed"].get<std::string>());
                     double angle = std::stod(j[1]["steering_angle"].get<std::string>());
                     double steer_value;
@@ -61,12 +73,7 @@ int main()
                     * NOTE: Feel free to play around with the throttle and speed. Maybe use
                     * another PID controller to control the speed!
                     */
-                    double cte_d = 0;
-                    double cte_total = 0;
-                    cte_total = pid.TotalError();
-
                     steer_value = -pid.Kp * cte; // - pid.Kd * cte_d - pid.Ki * cte_total;
-
                     if (steer_value > 1) {
                         steer_value =1;
                     };
@@ -76,6 +83,8 @@ int main()
 
                     // DEBUG
                     std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+                    std::cout << "number of cte: " << cte_history.size() << std::endl;
+                    std::cout << "total cte: " << cte_total << std::endl;
 
                     json msgJson;
                     msgJson["steering_angle"] = steer_value;
