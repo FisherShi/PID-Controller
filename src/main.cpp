@@ -35,13 +35,14 @@ int main()
 
     PID pid;
     // TODO: Initialize the pid variable.
-    pid.Kp = 0.03;
-    pid.Ki = 0;
-    pid.Kd = 0;
+    pid.Kp = 0.02;
+    pid.Ki = 0.004;
+    pid.Kd = 0.01;
     pid.Init(pid.Kp, pid.Ki, pid.Kd);
     std::vector<double> cte_history; // to store the cte values over time
+    double previous_time = 0;
 
-    h.onMessage([&pid,&cte_history](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+    h.onMessage([&pid,&cte_history,&previous_time](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
@@ -64,6 +65,23 @@ int main()
                         cte_total += n;
                     });
 
+                    //record time
+                    double current_time = clock();
+                    double delta_t = 0;
+                    if (cte_history.size() > 1){
+                        delta_t = (current_time - previous_time)/CLOCKS_PER_SEC;
+                    }
+                    previous_time = current_time;
+
+                    //calculate derivative of cte
+                    double cte_current = cte_history.end()[-1];
+                    double cte_last = cte_current;
+                    double cte_d = 0;
+                    if (cte_history.size() > 1){
+                        cte_last = cte_history.end()[-2];
+                        cte_d = (cte_current - cte_last)/delta_t;
+                    };
+
                     double speed = std::stod(j[1]["speed"].get<std::string>());
                     double angle = std::stod(j[1]["steering_angle"].get<std::string>());
                     double steer_value;
@@ -73,7 +91,7 @@ int main()
                     * NOTE: Feel free to play around with the throttle and speed. Maybe use
                     * another PID controller to control the speed!
                     */
-                    steer_value = -pid.Kp * cte; // - pid.Kd * cte_d - pid.Ki * cte_total;
+                    steer_value = -pid.Kp * cte - pid.Kd * cte_d - pid.Ki * cte_total;
                     if (steer_value > 1) {
                         steer_value =1;
                     };
@@ -84,11 +102,24 @@ int main()
                     // DEBUG
                     std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
                     std::cout << "number of cte: " << cte_history.size() << std::endl;
+                    std::cout << "last cte: " << cte_last << std::endl;
                     std::cout << "total cte: " << cte_total << std::endl;
+                    std::cout << "delta t: " << delta_t << std::endl;
+                    std::cout << "P: " << -pid.Kp * cte << std::endl;
+                    std::cout << "I: " << - pid.Ki * cte_total << std::endl;
+                    std::cout << "D: " << - pid.Kd * cte_d << std::endl;
+
+                    std::cout << "-------------------------------------------- "<< std::endl;
 
                     json msgJson;
                     msgJson["steering_angle"] = steer_value;
-                    msgJson["throttle"] = 0.3;
+                    if (speed < 30){
+                        msgJson["throttle"] = 3;
+                    }
+                    else{
+                        msgJson["throttle"] = 0;
+                    }
+
                     auto msg = "42[\"steer\"," + msgJson.dump() + "]";
                     std::cout << msg << std::endl;
                     ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
