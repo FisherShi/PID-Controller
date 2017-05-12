@@ -35,21 +35,19 @@ int main()
 
     PID pid;
     // TODO: Initialize the pid variable.
-    pid.Kp = 0.02;
-    pid.Ki = 0.004;
-    pid.Kd = 0.01;
+    pid.Kp = 0.025;
+    pid.Ki = 0.006;
+    pid.Kd = 0.008;
     pid.Init(pid.Kp, pid.Ki, pid.Kd);
-    std::vector<double> cte_history; // to store the cte values over time
     double previous_time = 0;
 
-    h.onMessage([&pid,&cte_history,&previous_time](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+    h.onMessage([&pid,&previous_time](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
         // "42" at the start of the message means there's a websocket message event.
         // The 4 signifies a websocket message
         // The 2 signifies a websocket event
 
         if (length && length > 2 && data[0] == '4' && data[1] == '2')
         {
-
             auto s = hasData(std::string(data));
             if (s != "") {
                 auto j = json::parse(s);
@@ -57,30 +55,15 @@ int main()
                 if (event == "telemetry") {
                     // j[1] is the data JSON object
                     double cte = std::stod(j[1]["cte"].get<std::string>());
-                    cte_history.push_back(cte);//store the history of cte
-
-                    //calculate total cte
-                    double cte_total = 0;
-                    std::for_each(cte_history.begin(), cte_history.end(), [&] (double n) {
-                        cte_total += n;
-                    });
 
                     //record time
                     double current_time = clock();
                     double delta_t = 0;
-                    if (cte_history.size() > 1){
+                    if (pid.p_error != 0){
                         delta_t = (current_time - previous_time)/CLOCKS_PER_SEC;
                     }
                     previous_time = current_time;
-
-                    //calculate derivative of cte
-                    double cte_current = cte_history.end()[-1];
-                    double cte_last = cte_current;
-                    double cte_d = 0;
-                    if (cte_history.size() > 1){
-                        cte_last = cte_history.end()[-2];
-                        cte_d = (cte_current - cte_last)/delta_t;
-                    };
+                    pid.UpdateError(cte, delta_t);
 
                     double speed = std::stod(j[1]["speed"].get<std::string>());
                     double angle = std::stod(j[1]["steering_angle"].get<std::string>());
@@ -91,7 +74,7 @@ int main()
                     * NOTE: Feel free to play around with the throttle and speed. Maybe use
                     * another PID controller to control the speed!
                     */
-                    steer_value = -pid.Kp * cte - pid.Kd * cte_d - pid.Ki * cte_total;
+                    steer_value = -pid.Kp * cte - pid.Kd * pid.d_error - pid.Ki * pid.i_error;
                     if (steer_value > 1) {
                         steer_value =1;
                     };
@@ -101,14 +84,11 @@ int main()
 
                     // DEBUG
                     std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
-                    std::cout << "number of cte: " << cte_history.size() << std::endl;
-                    std::cout << "last cte: " << cte_last << std::endl;
-                    std::cout << "total cte: " << cte_total << std::endl;
                     std::cout << "delta t: " << delta_t << std::endl;
-                    std::cout << "P: " << -pid.Kp * cte << std::endl;
-                    std::cout << "I: " << - pid.Ki * cte_total << std::endl;
-                    std::cout << "D: " << - pid.Kd * cte_d << std::endl;
-
+                    std::cout << "cumulated cte: " << pid.i_error << std::endl;
+                    std::cout << "P controller: " << -pid.Kp * cte << std::endl;
+                    std::cout << "I controller: " << - pid.Ki * pid.i_error << std::endl;
+                    std::cout << "D controller: " << - pid.Kd * pid.d_error << std::endl;
                     std::cout << "-------------------------------------------- "<< std::endl;
 
                     json msgJson;
