@@ -15,6 +15,7 @@ The larger the kd, the more sentive the car is to the change in cte. If we set k
 * I first tweaked kp to a value to a value that the car's react to cte is in a reasonalbe range with moderate overshooting.
 * then I tweaked kd to handle overshooting. I started from a very small value (0.001) and gradually increased the value.  
 * then I tweaked ki to hadle systematic bias. I started from a very small value (0.001) and gradually increased the value.
+* Finally, I fine-tuned the hyperparameters to improve the performance.
 # Others
 * I set the speed limit to 30 mph. 
 * I calcultated the time between each time a cte value is colleted to calculate derivative of cte 
